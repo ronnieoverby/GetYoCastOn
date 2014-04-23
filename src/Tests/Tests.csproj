@@ -60,7 +60,7 @@
       <Name>GetYoCastOn</Name>
     </ProjectReference>
     <ProjectReference Include="..\SomeDB\SomeDB.csproj">
-      <Project>{7035A9AC-9CEE-470F-B2A9-A59EE0A8D579}</Project>
+      <Project>{7035a9ac-9cee-470f-b2a9-a59ee0a8d579}</Project>
       <Name>SomeDB</Name>
     </ProjectReference>
   </ItemGroup>

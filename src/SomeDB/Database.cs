@@ -2,19 +2,17 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Instrumentation;
-using System.Text;
 
 namespace SomeDB
 {
-    // TODO use a serializer that wont barf when property types are changed
     // TODO dry up the code that writes to disk
-    // TODO polymorphic queries :)
+    // TODO Read/Write Locking 4 thread safety
 
     public class Database
     {
         private readonly DirectoryInfo _dir;
         private readonly ISerializer _ser = new MyJsonSerializer();
+        private readonly Dictionary<Type, Type[]> _subTypes = new Dictionary<Type, Type[]>();
 
         public Database(string storageDirectoryPath)
         {
@@ -33,7 +31,7 @@ namespace SomeDB
             var file = _dir.CreateSubdirectory(type.FullName).GetFile(id.ToString());
 
             return file.Exists
-                ? _ser.Deserialize<T>(File.ReadAllText(file.FullName))
+                ? (T)_ser.Deserialize(File.ReadAllText(file.FullName), type)
                 : null;
         }
 
@@ -49,15 +47,34 @@ namespace SomeDB
 
         public IEnumerable<StoredItem<T>> GetStoredItems<T>() where T : class
         {
-            var type = typeof(T);
+            var tDirs = GetTypeDirs<T>();
 
-            var tDir = _dir.CreateSubdirectory(type.FullName);
-
-            return tDir.EnumerateFiles().Select(f =>
+            var files = tDirs.SelectMany(dir => dir.Directory.EnumerateFiles(), (dir, file) => new
             {
-                var item = _ser.Deserialize<T>(File.ReadAllText(f.FullName));
-                return new StoredItem<T>(DeriveId(item), f, item);
+                File = file,
+                TypeDirectory = dir
+            }).ToArray();
+
+
+            return files.Select(x =>
+            {
+                var item = (T) _ser.Deserialize(File.ReadAllText(x.File.FullName), x.TypeDirectory.Type);
+
+                return new StoredItem<T>(DeriveId(item), x.File, item);
             });
+
+        }
+
+        private IEnumerable<TypeDirectory> GetTypeDirs<T>()
+        {
+            var type = typeof(T);
+            yield return new TypeDirectory(_dir, type);
+
+            if (!_subTypes.ContainsKey(type))
+                _subTypes[type] = type.GetAllSubTypes();
+
+            foreach (var subType in _subTypes[type])
+                yield return new TypeDirectory(_dir, subType);
         }
 
         private object DeriveId(object item)

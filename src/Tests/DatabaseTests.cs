@@ -151,6 +151,21 @@ namespace Tests
             Assert.That(id, Is.TypeOf<Guid>());
             Assert.That(p.Id, Is.Null);
         }
+
+        [Test]
+        public void CanQueryPolymorphically()
+        {
+            var db = new Database(Dir);
+            db.Save(new Child
+            {
+                Age = 3,
+                FavToy = "Ipad",
+                Name = "Anna"
+            });
+
+            Assert.True(db.Query<Person>().OfType<Child>().Any());
+            Assert.True(db.Query<Person>().Any(x => x.GetType() != typeof (Child)));
+        }
     }
 
     public class Rec1
@@ -173,5 +188,10 @@ namespace Tests
         public string Id { get; set; }
         public string Name { get; set; }
         public int Age { get; set; }
+    }
+
+    public class Child : Person
+    {
+        public string FavToy { get; set; }
     }
 }

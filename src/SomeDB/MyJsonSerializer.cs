@@ -1,3 +1,4 @@
+using System;
 using Newtonsoft.Json;
 
 namespace SomeDB
@@ -9,9 +10,9 @@ namespace SomeDB
             return JsonConvert.SerializeObject(value);
         }
 
-        public T Deserialize<T>(string s)
+        public object Deserialize(string s,Type type)
         {
-            return JsonConvert.DeserializeObject<T>(s);
+            return JsonConvert.DeserializeObject(s, type);
         }
     }
 }
