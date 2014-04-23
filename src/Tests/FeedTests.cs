@@ -3,7 +3,7 @@ using NUnit.Framework;
 
 namespace Tests
 {
-    public class SomeTests
+    public class FeedTests
     {
         [Test]
         public void Can_Get_Title_From_Feed()
