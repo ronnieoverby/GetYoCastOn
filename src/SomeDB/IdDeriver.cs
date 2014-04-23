@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Xml.Serialization;
 
 namespace SomeDB
 {
@@ -11,8 +10,11 @@ namespace SomeDB
         /// Get's an id for the object
         /// Sets the Id property if its not already set.
         /// </summary>
-        public static object DeriveId<T>(this T obj)
+        public static object DeriveId<T>(this T obj, ISerializer serializer) where T : class
         {
+            if (obj == null) throw new ArgumentNullException("obj");
+            if (serializer == null) throw new ArgumentNullException("serializer");
+
             var type = obj.GetType();
 
             var idProp =
@@ -22,7 +24,7 @@ namespace SomeDB
             {
                 // there is no id property
                 // create an id based on the object's state
-                return DeriveIdFromState(obj);
+                return DeriveIdFromState(obj, serializer);
             }
 
             // there is an id property
@@ -37,9 +39,9 @@ namespace SomeDB
             if (idProp.CanRead)
                 id = idProp.GetValue(obj, null);
 
-            if (idProp.PropertyType == typeof (string))
+            if (idProp.PropertyType == typeof(string))
             {
-                if (!string.IsNullOrWhiteSpace((string) id)) 
+                if (!string.IsNullOrWhiteSpace((string)id))
                     return id;
 
                 id = Guid.NewGuid().ToString();
@@ -48,9 +50,9 @@ namespace SomeDB
                     idProp.SetValue(obj, id, null);
             }
 
-            else if (idProp.PropertyType == typeof (Guid) || idProp.PropertyType == typeof(Guid?))
+            else if (idProp.PropertyType == typeof(Guid) || idProp.PropertyType == typeof(Guid?))
             {
-                if ((id != null && Guid.Empty != (Guid) id)) 
+                if ((id != null && Guid.Empty != (Guid)id))
                     return id;
 
                 id = Guid.NewGuid();
@@ -62,15 +64,9 @@ namespace SomeDB
             return id ?? Guid.NewGuid();
         }
 
-        internal static object DeriveIdFromState<T>(T item)
+        internal static object DeriveIdFromState<T>(T item, ISerializer serializer)
         {
-            var type = typeof(T);
-            var ser = new XmlSerializer(type);
-            using (var writer = new StringWriter())
-            {
-                ser.Serialize(writer, item);
-                return writer.ToString().CreateDeterministicGuid();
-            }
+            return serializer.Serialize(item).CreateDeterministicGuid();
         }
     }
 }

@@ -9,6 +9,7 @@ namespace Tests
     public class DatabaseTests
     {
         const string Dir = @"c:\somedb\";
+        readonly ISerializer _ser = new MyJsonSerializer();
 
         [Test]
         public void LoadTest()
@@ -73,10 +74,10 @@ namespace Tests
         public void CanCreateDeterministicIdFromState()
         {
             var p = new Person {Age = 29, Name = "Ronnie"};
-            var id = IdDeriver.DeriveIdFromState(p);
-            var id2 = IdDeriver.DeriveIdFromState(p);
+            var id = IdDeriver.DeriveIdFromState(p, _ser);
+            var id2 = IdDeriver.DeriveIdFromState(p, _ser);
             p.Age += 1;
-            var id3 = IdDeriver.DeriveIdFromState(p);
+            var id3 = IdDeriver.DeriveIdFromState(p, _ser);
 
             Assert.That(id, Is.EqualTo(id2));
             Assert.That(id, Is.Not.EqualTo(id3));
@@ -86,7 +87,7 @@ namespace Tests
         public void CanGetStringIdFromObject()
         {
             var p = new Person {Id = "abc"};
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id));
         }
 
@@ -94,7 +95,7 @@ namespace Tests
         public void StringIdSetWhenMissing()
         {
             var p = new Person();
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.Not.Empty.Or.Null);
             Assert.That(id, Is.EqualTo(p.Id));
         }
@@ -103,7 +104,7 @@ namespace Tests
         public void GuidIdSetWhenMissing()
         {
             var p = new Rec1();
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id).And.Not.EqualTo(Guid.Empty));
         }
 
@@ -111,7 +112,7 @@ namespace Tests
         public void NullableGuidIdSetWhenMissing()
         {
             var p = new Rec2();
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id).And.Not.EqualTo(Guid.Empty).And.Not.Null);
         }
 
@@ -120,7 +121,7 @@ namespace Tests
         {
             var id = "Ronnie".CreateDeterministicGuid();
             var p = new Rec1 { Id = id };
-            var id2 = p.DeriveId();
+            var id2 = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id).And.EqualTo(id2));
         }
 
@@ -129,7 +130,7 @@ namespace Tests
         {
             var id = "Ronnie".CreateDeterministicGuid();
             var p = new Rec2 { Id = id };
-            var id2 = p.DeriveId();
+            var id2 = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id).And.EqualTo(id2));
         }
 
@@ -138,7 +139,7 @@ namespace Tests
         {
             const int value = 123;
             var p = new Rec3 {Id = value};
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.EqualTo(p.Id).And.EqualTo(value));
         }
 
@@ -146,7 +147,7 @@ namespace Tests
         public void IntIdWontBeSetOnObjectWhenMissing()
         {
             var p = new Rec3();
-            var id = p.DeriveId();
+            var id = p.DeriveId(_ser);
             Assert.That(id, Is.TypeOf<Guid>());
             Assert.That(p.Id, Is.Null);
         }

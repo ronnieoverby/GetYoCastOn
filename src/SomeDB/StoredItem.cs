@@ -10,7 +10,7 @@ namespace SomeDB
         public T Value { get; private set; }
         
         // TODO start using this guy to cut down on how many times the object is serialized
-        public string SerializedState { get; set; } 
+        //public string SerializedState { get; set; } 
 
         public StoredItem(object id, FileInfo file, T value)
         {

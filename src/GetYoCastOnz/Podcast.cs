@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -13,9 +11,8 @@ namespace GetYoCastOn
     {
         public Podcast(string url)
         {
-            var feedUri = new Uri(url);
-            FeedUri = feedUri;
-            Title = GetTitle(feedUri);
+            FeedUrl = url;
+            Title = GetTitle(FeedUri);
         }
 
         private static string GetTitle(Uri feedUri)
@@ -40,7 +37,18 @@ namespace GetYoCastOn
         }
 
         public string Id { get; set; }
-        public Uri FeedUri { get; set; }
+        public string FeedUrl { get; set; }
+
+        public Uri FeedUri
+        {
+            get
+            {
+                if (FeedUrl != null)
+                    return new Uri(FeedUrl);
+                return null;
+            }
+        }
+
         public string Title { get; set; }
         public PodcastSettings Settings { get; set; }
 
