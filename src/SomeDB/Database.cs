@@ -8,6 +8,8 @@ namespace SomeDB
     // TODO dry up the code that writes to disk
     // TODO Read/Write Locking 4 thread safety
 
+    
+
     public class Database
     {
         private readonly DirectoryInfo _dir;
@@ -47,20 +49,10 @@ namespace SomeDB
 
         public IEnumerable<StoredItem<T>> GetStoredItems<T>() where T : class
         {
-            var tDirs = GetTypeDirs<T>();
-
-            var files = tDirs.SelectMany(dir => dir.Directory.EnumerateFiles(), (dir, file) => new
+            return GetTypeDirs<T>().SelectMany(dir => dir.Directory.EnumerateFiles(), (d, f) =>
             {
-                File = file,
-                TypeDirectory = dir
-            }).ToArray();
-
-
-            return files.Select(x =>
-            {
-                var item = (T) _ser.Deserialize(File.ReadAllText(x.File.FullName), x.TypeDirectory.Type);
-
-                return new StoredItem<T>(DeriveId(item), x.File, item);
+                var item = (T) _ser.Deserialize(File.ReadAllText(f.FullName), d.Type);
+                return new StoredItem<T>(DeriveId(item), f, item);
             });
 
         }
