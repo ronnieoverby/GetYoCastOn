@@ -1,147 +1,170 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace SomeDB
 {
-    // TODO dry up the code that writes to disk
-    // TODO Read/Write Locking 4 thread safety
-
-    
+    // TODO polymorphic queries
 
     public class Database
     {
-        private readonly DirectoryInfo _dir;
-        private readonly ISerializer _ser = new MyJsonSerializer();
-        private readonly Dictionary<Type, Type[]> _subTypes = new Dictionary<Type, Type[]>();
+        private readonly IStorage _storage;
+        private readonly ISerializer _serializer;
+        private readonly Func<string> _idFactory;
+        private readonly ILookup<Type, Index> _indexes;
 
-        public Database(string storageDirectoryPath)
+
+        public Database()
+            : this(BuildDefaultConfig())
         {
-            if (storageDirectoryPath == null) throw new ArgumentNullException("storageDirectoryPath");
-
-            _dir = new DirectoryInfo(storageDirectoryPath);
-            _dir.Create();
         }
 
-        public T Load<T>(object id) where T : class
+        private static DatabaseConfig BuildDefaultConfig()
+        {
+            return new DatabaseConfig
+            {
+                Serializer = new JsonSerializer(),
+                Storage = new PersistedMemoryStorage()
+            };
+        }
+
+        public Database(DatabaseConfig config)
+            : this(config.Storage, config.Serializer, config.Indexes, config.IdFactory)
+        {
+        }
+
+        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, Func<string> idFactory)
+        {
+            if (storage == null) throw new ArgumentNullException("storage");
+            if (serializer == null) throw new ArgumentNullException("serializer");
+            _storage = storage;
+            _serializer = serializer;
+            _idFactory = idFactory;
+
+            if (indexes != null)
+                _indexes = indexes.ToLookup(x => x.Type);
+
+            foreach (var type in _indexes.Select(x => x.Key))
+                foreach (var value in GetEnumerable(type))
+                    foreach (var index in _indexes[type])
+                        index.Update(value);
+        }
+
+        private IEnumerable<IDocument> GetEnumerable(Type type)
+        {
+            // todo make polymorphic
+            foreach (var serialized in _storage.RetrieveAll(type))
+            {
+                var value = _serializer.Deserialize(serialized, type);
+                yield return (IDocument)value;
+            }
+        }
+
+        public void Save<T>(IEnumerable<T> values) where T : IDocument
+        {
+            if (values == null) throw new ArgumentNullException("values");
+            foreach (var item in values)
+                Save(item);
+        }
+
+        public void Save<T>(T value) where T : IDocument
+        {
+            if (value == null) throw new ArgumentNullException("value");
+
+            if (string.IsNullOrWhiteSpace(value.Id))
+                value.Id = _idFactory();
+
+            var type = value.GetType();
+
+            var serialized = _serializer.Serialize(value);
+            _storage.Store(type, value.Id, serialized);
+
+            // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
+            foreach (Index<T> index in _indexes[type])
+                index.Update(value);
+        }
+
+        public T Load<T>(string id) where T : IDocument
         {
             if (id == null) throw new ArgumentNullException("id");
 
-            // find the first T with that id
             var type = typeof(T);
-            var file = _dir.CreateSubdirectory(type.FullName).GetFile(id.ToString());
-
-            return file.Exists
-                ? (T)_ser.Deserialize(File.ReadAllText(file.FullName), type)
-                : null;
+            var serialized = _storage.Retrieve(type, id);
+            return (T)_serializer.Deserialize(serialized, type);
         }
 
-        public IQueryable<T> Query<T>() where T : class
-        {
-            return GetEnumerable<T>().AsQueryable();
-        }
-
-        public IEnumerable<T> GetEnumerable<T>() where T : class
-        {
-            return GetStoredItems<T>().Select(x => x.Value);
-        }
-
-        public IEnumerable<StoredItem<T>> GetStoredItems<T>() where T : class
-        {
-            return GetTypeDirs<T>().SelectMany(dir => dir.Directory.EnumerateFiles(), (d, f) =>
-            {
-                var item = (T) _ser.Deserialize(File.ReadAllText(f.FullName), d.Type);
-                return new StoredItem<T>(DeriveId(item), f, item);
-            });
-
-        }
-
-        private IEnumerable<TypeDirectory> GetTypeDirs<T>()
-        {
-            var type = typeof(T);
-            yield return new TypeDirectory(_dir, type);
-
-            if (!_subTypes.ContainsKey(type))
-                _subTypes[type] = type.GetAllSubTypes();
-
-            foreach (var subType in _subTypes[type])
-                yield return new TypeDirectory(_dir, subType);
-        }
-
-        private object DeriveId(object item)
-        {
-            return item.DeriveId(_ser);
-        }
-
-        public StoredItem<T> Save<T>(T item, object id = null) where T : class
-        {
-            if (item == null) throw new ArgumentNullException("item");
-            id = id ?? DeriveId(item);
-
-            // put file on disk in the T namespace named after id
-
-            var type = item.GetType();
-            var file = _dir.CreateSubdirectory(type.FullName).GetFile(id.ToString());
-            File.WriteAllText(file.FullName, _ser.Serialize(item));
-
-            return new StoredItem<T>(id, file, item);
-        }
-
-        public IEnumerable<StoredItem<T>> SaveAll<T>(IEnumerable<T> items) where T : class
-        {
-            if (items == null) throw new ArgumentNullException("items");
-            foreach (var item in items)
-                yield return Save(item);
-        }
-
-        public void DeleteById<T>(object id) where T : class
+        public void Delete<T>(string id) where T : IDocument
         {
             if (id == null) throw new ArgumentNullException("id");
-            var type = typeof(T);
-            var file = _dir.CreateSubdirectory(type.FullName).GetFile(id.ToString());
-            file.Delete();
+            Delete(typeof(T), id);
         }
 
-        public void Delete<T>(T item) where T : class
+        public void Delete(IDocument value)
         {
-            if (item == null) throw new ArgumentNullException("item");
-
-            var id = DeriveId(item);
-            DeleteById<T>(id);
+            if (value == null) throw new ArgumentNullException("value");
+            Delete(value.GetType(), value.Id);
         }
 
-        public void DeleteWhere<T>(Func<T, bool> predicate = null) where T : class
+        public void Delete(IEnumerable<IDocument> values)
         {
-            var items = GetStoredItems<T>()
-                .Where(x => predicate == null || predicate(x.Value));
-
-            foreach (var item in items)
-                item.File.Delete();
+            if (values == null) throw new ArgumentNullException("values");
+            foreach (var doc in values)
+                Delete(doc.GetType(), doc.Id);
         }
 
-        public void DeleteAll<T>(IEnumerable<T> items) where T : class
+        public void Delete(Type type, string id)
         {
-            if (items == null) throw new ArgumentNullException("items");
+            if (type == null) throw new ArgumentNullException("type");
+            if (id == null) throw new ArgumentNullException("id");
 
-            foreach (var item in items)
-                Delete(item);
+            _storage.Remove(type, id);
+            foreach (var index in _indexes[type])
+                index.Remove(id);
         }
 
-        public void Update<T>(Action<T> updateAction, Func<T, bool> predicate = null) where T : class
+        public IEnumerable<T> GetEnumerable<T>() where T : IDocument
         {
-            var items = GetStoredItems<T>();
-            foreach (var item in items.Where(x => predicate == null || predicate(x.Value)))
+            return GetEnumerable(typeof(T)).Cast<T>();
+        }
+
+        public IEnumerable<TDoc> Query<TDoc, TKey>(Index<TDoc, TKey> index, Func<TKey, bool> indexPredicate = null, Func<TDoc, bool> documentPredicate = null)
+            where TDoc : IDocument
+        {
+            if (index == null) throw new ArgumentNullException("index");
+
+            var ids = index.Query(indexPredicate);
+            return ids.Select(Load<TDoc>).Where(x => documentPredicate == null || documentPredicate(x));
+        }
+
+        public void Update<T>(Action<T> updateAction, Func<T, bool> predicate = null) where T : IDocument
+        {
+            if (updateAction == null) throw new ArgumentNullException("updateAction");
+
+            foreach (var item in GetEnumerable<T>().Where(item => predicate == null || predicate(item)))
             {
-                updateAction(item.Value);
+                updateAction(item);
                 Save(item);
             }
         }
 
-        private void Save<T>(StoredItem<T> storedItem) where T : class
+        public void Update<TDoc, TKey>(Index<TDoc, TKey> index, Action<TDoc> updateAction, Func<TKey, bool> indexPredicate = null, Func<TDoc, bool> documentPredicate = null) where TDoc : IDocument
         {
-            if (storedItem == null) throw new ArgumentNullException("storedItem");
-            File.WriteAllText(storedItem.File.FullName, _ser.Serialize(storedItem.Value));
+            if (index == null) throw new ArgumentNullException("index");
+            if (updateAction == null) throw new ArgumentNullException("updateAction");
+
+            foreach (var item in Query(index, indexPredicate, documentPredicate))
+            {
+                updateAction(item);
+                Save(item);
+            }
+        }
+
+        public void Delete<TDoc, TKey>(Index<TDoc, TKey> index, Func<TKey, bool> indexPredicate = null, Func<TDoc, bool> documentPredicate = null) where TDoc : IDocument
+        {
+            if (index == null) throw new ArgumentNullException("index");
+
+            foreach (var item in Query(index, indexPredicate, documentPredicate))
+                Delete(item);
         }
     }
 }

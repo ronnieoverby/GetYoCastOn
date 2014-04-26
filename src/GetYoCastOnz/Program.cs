@@ -7,14 +7,19 @@ namespace GetYoCastOn
 {
     public class Program
     {
-        private readonly Database _db = new Database("data");
+        private Database _db;
 
+
+        public Program()
+        {
+            var config = DatabaseConfig.CreateDefault();
+            config.Storage = new FileSystemStorage("data");
+            _db = new Database(config);
+        }
 
         private static void Main()
         {
-
             new Program().Run();
-
         }
 
         private void Run()
@@ -46,7 +51,7 @@ namespace GetYoCastOn
             Console.WriteLine("Title?");
             var title = Console.ReadLine();
             var results =
-                _db.Query<Podcast>().Where(x => x.Title.Contains(title, StringComparison.OrdinalIgnoreCase)).ToArray();
+                _db.GetEnumerable<Podcast>().Where(x => x.Title.Contains(title, StringComparison.OrdinalIgnoreCase)).ToArray();
 
             if (!results.Any())
                 Console.WriteLine("No Results");
@@ -61,7 +66,7 @@ namespace GetYoCastOn
 
                 if (!selection.Succeeded) return;
 
-                _db.DeleteById<Podcast>(selection.Value.Id);
+                _db.Delete(selection.Value);
                 Console.WriteLine("Deleted {0}", selection.Value.Title);
             }
         }
@@ -80,7 +85,7 @@ namespace GetYoCastOn
 
         private void ViewCasts()
         {
-            foreach (var cast in _db.Query<Podcast>().OrderBy(x => x.Title))
+            foreach (var cast in _db.GetEnumerable<Podcast>().OrderBy(x => x.Title))
                 Console.WriteLine(cast.Title);
         }
 
@@ -88,16 +93,18 @@ namespace GetYoCastOn
         {
             _db.Save(new PodcastSettings
             {
+                Id = "global",
                 SplitLength = TimeSpan.FromSeconds(45),
-                TempoMultiplier = 1.25
-            }, "global");
+                TempoMultiplier = 1.25,
+            });
+
             var casts = new[]
             {
                 new Podcast("http://feeds2.feedburner.com/HerdingCode?fmt=xml"),
                 new Podcast("http://feeds.feedburner.com/netRocksFullMp3Downloads?fmt=xml"),
             };
 
-            foreach (var cast in casts.Where(cast => !_db.Query<Podcast>().Any(x => x.Title == cast.Title)))
+            foreach (var cast in casts.Where(cast => _db.GetEnumerable<Podcast>().All(x => x.Title != cast.Title)))
                 _db.Save(cast);
         }
     }

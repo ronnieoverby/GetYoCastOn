@@ -3,14 +3,14 @@ using Newtonsoft.Json;
 
 namespace SomeDB
 {
-    internal class MyJsonSerializer : ISerializer
+    internal class JsonSerializer : ISerializer
     {
         public string Serialize(object value)
         {
             return JsonConvert.SerializeObject(value);
         }
 
-        public object Deserialize(string s,Type type)
+        public object Deserialize(string s, Type type)
         {
             return JsonConvert.DeserializeObject(s, type);
         }

@@ -5,6 +5,6 @@ namespace SomeDB
     public interface ISerializer
     {
         string Serialize(object value);
-        object Deserialize(string s, Type type);
+        object Deserialize(string serializedState, Type type);
     }
 }

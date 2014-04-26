@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 
 namespace SomeDB
 {
@@ -14,22 +12,30 @@ namespace SomeDB
             return new FileInfo(Path.Combine(dir.FullName, fileName));
         }
 
-        public static Type[] GetAllSubTypes(this Type type)
+        public static Type[] GetTypes(this AppDomain appDomain)
         {
-            if (type == null) throw new ArgumentNullException("type");
+            if (appDomain == null) throw new ArgumentNullException("appDomain");
 
             return AppDomain.CurrentDomain.GetAssemblies()
                 .SelectMany(a =>
                 {
                     try
                     {
-                        return a.GetTypes().Where(x => x != type).Where(type.IsAssignableFrom);
+                        return a.GetTypes();
                     }
                     catch (Exception)
                     {
                         return new Type[0];
                     }
                 }).ToArray();
+        }
+
+        public static Type[] GetAllSubTypes(this Type type)
+        {
+            if (type == null) throw new ArgumentNullException("type");
+
+            return AppDomain.CurrentDomain.GetTypes().Where(x => x != type).Where(type.IsAssignableFrom)
+                .ToArray();
         }
     }
 }

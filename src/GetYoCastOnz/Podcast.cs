@@ -4,10 +4,11 @@ using System.Linq;
 using System.Net;
 using System.ServiceModel.Syndication;
 using System.Xml;
+using SomeDB;
 
 namespace GetYoCastOn
 {
-    public class Podcast
+    public class Podcast : IDocument
     {
         public Podcast(string url)
         {
@@ -33,7 +34,7 @@ namespace GetYoCastOn
 
         public Podcast()
         {
-            
+
         }
 
         public string Id { get; set; }
@@ -68,7 +69,7 @@ namespace GetYoCastOn
 
             var dest = new FileInfo(Path.Combine(directoryInfo.FullName, link.Uri.LocalPath));
             dest.Directory.Create();
-            
+
 
             using (var read = new WebClient().OpenRead(link.Uri))
             using (var write = File.OpenWrite(dest.FullName))
@@ -88,7 +89,7 @@ namespace GetYoCastOn
             if (link.RelationshipType != null && link.RelationshipType.Equals("enclosure", ignoreCase))
                 score++;
 
-            var exts = new[] {"mp3", "ogg", "wav"};
+            var exts = new[] { "mp3", "ogg", "wav" };
             if (exts.Any(x => link.Uri.LocalPath.EndsWith(x, ignoreCase)))
                 score++;
 
