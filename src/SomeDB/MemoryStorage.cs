@@ -65,5 +65,18 @@ namespace SomeDB
             foreach (var item in q)
                 otherStorage.Store(item.type, item.id, item.value);
         }
+
+        public void Purge()
+        {
+            _types.Clear();
+        }
+
+        public void Purge(Type type)
+        {
+            if(!_types.ContainsKey(type))
+                return;
+
+            _types[type].Clear();
+        }
     }
 }

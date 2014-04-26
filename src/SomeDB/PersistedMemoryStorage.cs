@@ -47,5 +47,17 @@ namespace SomeDB
         {
             _mem.CopyTo(otherStorage);
         }
+
+        public void Purge()
+        {
+            _fs.Purge();
+            _mem.Purge();
+        }
+
+        public void Purge(Type type)
+        {
+            _mem.Purge(type);
+            _fs.Purge(type);
+        }
     }
 }

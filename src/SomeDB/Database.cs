@@ -10,9 +10,8 @@ namespace SomeDB
     {
         private readonly IStorage _storage;
         private readonly ISerializer _serializer;
-        private readonly Func<string> _idFactory;
+        private readonly Func<Type, string> _idFactory;
         private readonly ILookup<Type, Index> _indexes;
-
 
         public Database()
             : this(BuildDefaultConfig())
@@ -33,7 +32,7 @@ namespace SomeDB
         {
         }
 
-        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, Func<string> idFactory)
+        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, Func<Type, string> idFactory)
         {
             if (storage == null) throw new ArgumentNullException("storage");
             if (serializer == null) throw new ArgumentNullException("serializer");
@@ -60,6 +59,11 @@ namespace SomeDB
             }
         }
 
+        public void Purge()
+        {
+            _storage.Purge();
+        }
+
         public void Save<T>(IEnumerable<T> values) where T : IDocument
         {
             if (values == null) throw new ArgumentNullException("values");
@@ -71,10 +75,10 @@ namespace SomeDB
         {
             if (value == null) throw new ArgumentNullException("value");
 
-            if (string.IsNullOrWhiteSpace(value.Id))
-                value.Id = _idFactory();
-
             var type = value.GetType();
+            
+            if (string.IsNullOrWhiteSpace(value.Id))
+                value.Id = _idFactory(type);
 
             var serialized = _serializer.Serialize(value);
             _storage.Store(type, value.Id, serialized);

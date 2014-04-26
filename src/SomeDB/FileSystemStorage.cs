@@ -81,5 +81,17 @@ namespace SomeDB
             foreach (var item in q)
                 otherStorage.Store(item.type, item.id, item.value);
         }
+
+        public void Purge()
+        {
+            foreach (var directoryInfo in _dir.GetDirectories())
+                directoryInfo.Delete(true);
+        }
+
+        public void Purge(Type type)
+        {
+            foreach (var directoryInfo in _dir.EnumerateDirectories(type.FullName))
+                directoryInfo.Delete(true);
+        }
     }
 }
