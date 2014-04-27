@@ -16,8 +16,8 @@ namespace SomeDB
             Type = type;
         }
 
-        public abstract void Remove(string id);
-        public abstract void Update(IDocument value);
+        internal abstract void Remove(DocId docId);
+        internal abstract void Update(IDocument value);
     }
 
     public abstract class Index<TDoc> : Index
@@ -34,8 +34,8 @@ namespace SomeDB
         private readonly Func<TDoc, TKey> _keyFactory;
         private readonly IEqualityComparer<TKey> _keyComparer;
         private readonly Func<TDoc, bool> _predicate;
-        private readonly Dictionary<string, TKey> _idMap = new Dictionary<string, TKey>();
-        private readonly Dictionary<TKey, HashSet<string>> _idx = new Dictionary<TKey, HashSet<string>>();
+        private readonly Dictionary<DocId, TKey> _idMap = new Dictionary<DocId, TKey>();
+        private readonly Dictionary<TKey, HashSet<DocId>> _idx = new Dictionary<TKey, HashSet<DocId>>();
 
         public Index(Func<TDoc, TKey> keyFactory, Func<TDoc, bool> predicate = null, IEqualityComparer<TKey> keyComparer = null)
         {
@@ -45,13 +45,13 @@ namespace SomeDB
             _predicate = predicate;
         }
 
-        public void Update(TDoc value)
+        internal void Update(TDoc doc)
         {
-            if (_predicate != null && !_predicate(value))
+            if (_predicate != null && !_predicate(doc))
                 return;
 
-            var id = value.Id;
-            var newKey = _keyFactory(value);
+            var id = new DocId(doc);
+            var newKey = _keyFactory(doc);
 
             _lock.EnterReadLock();
             try
@@ -88,7 +88,7 @@ namespace SomeDB
                 if (_idx.ContainsKey(newKey))
                     _idx[newKey].Add(id);
                 else
-                    _idx[newKey] = new HashSet<string>(new[] { id });
+                    _idx[newKey] = new HashSet<DocId>(new[] {id});
 
                 if (!hasOldKey) return;
 
@@ -104,7 +104,7 @@ namespace SomeDB
             }
         }
 
-        public override void Remove(string id)
+        internal override void Remove(DocId id)
         {
             _lock.EnterReadLock();
             try
@@ -142,19 +142,19 @@ namespace SomeDB
             }
         }
 
-        public override void Update(IDocument value)
+        internal override void Update(IDocument value)
         {
             Update((TDoc)value);
         }
 
-        public string[] Query(TKey key)
+        internal DocId[] Query(TKey key)
         {
             _lock.EnterReadLock();
             try
             {
                 return _idx.ContainsKey(key)
                     ? _idx[key].ToArray()
-                    : new string[0];
+                    : new DocId[0];
             }
             finally
             {
@@ -162,7 +162,7 @@ namespace SomeDB
             }
         }
 
-        public string[] Query(Func<TKey, bool> predicate)
+        public DocId[] Query(Func<TKey, bool> predicate)
         {
             _lock.EnterReadLock();
             try

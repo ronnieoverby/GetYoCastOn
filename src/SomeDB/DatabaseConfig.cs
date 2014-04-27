@@ -6,9 +6,9 @@ namespace SomeDB
     public class DatabaseConfig
     {
         public IStorage Storage { get; set; }
-        public ISerializer Serializer { get; set; }
         public IList<Index> Indexes { get; set; }
         public IIdFactory IdFactory { get; set; }
+        public Stats Stats { get; set; }
 
         public DatabaseConfig()
         {
@@ -19,9 +19,8 @@ namespace SomeDB
         {
             return new DatabaseConfig
             {
-                Serializer = new JsonSerializer(),
-                Storage = new FileSystemStorage(),
-                IdFactory = new GuidIdFactory()
+                Storage = new EsentStorage(),
+                IdFactory = new GuidIdFactory(),
             };
         }
     }

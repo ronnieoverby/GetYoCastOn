@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using CoreTechs.Common;
 using NUnit.Framework;
 using SomeDB;
@@ -12,26 +11,53 @@ namespace Tests
     public class DbTest
     {
         [Test]
+        public void CanStoreDocument()
+        {
+            var db = new Database(new MemoryStorage());
+            db.Save(new Person());
+            db.GetEnumerable<Person>().Single();
+        }
+
+        [Test]
+        public void CanIndexDocument()
+        {
+            var idx = new Index<Person, string>(x => x.Name);
+            var db = new Database(new MemoryStorage(), new[] { idx });
+            db.Save(new Person { Name = "Ronnie" });
+            db.Query(idx).Single();
+        }
+
+        [Test]
         public void Test()
         {
-            var config = DatabaseConfig.CreateDefault();
+            var wallwalla = "wallwalla";
 
-            var index = new Index<Person, string>(
-                x => x.Name,
-                x => x.Age >= 13,
-                StringComparer.OrdinalIgnoreCase);
+            Func<IStorage> makeStorage = () => new EsentStorage(wallwalla);
 
-            config.Indexes.Add(index);
+            /*  using (var db = new Database(makeStorage()))
+                  db.Delete(db.GetEnumerable());*/
 
-            var index2 = new Index<Person, int>(x => x.Age);
-            config.Indexes.Add(index2);
+            var idxAgeGender = new Index<Person, dynamic>(x => new { x.Age, x.Gender });
 
-            var db = new Database(config);
 
-            var under13 = db.Query(index2, x => x < 13).ToArray();
-            under13.Noop();
+            using (var db = new Database(makeStorage(), new[] { idxAgeGender }, stats: new Stats()))
+            {
+                db.SaveMany(Person.MakeMany().Take(100));
+
+                const double age = 29;
+                var min = Math.Ceiling(age / 2 + 7);
+                var max = age + (age - min);
+
+                var ladies = db.Query(idxAgeGender, x => x.Age >= min && x.Age <= max && x.Gender == Gender.Female);
+
+              /*  foreach (var lady in ladies.OrderBy(x => x.Age))
+                    Console.WriteLine("{0} ({1})", lady.Name, lady.Age);*/
+
+                Console.WriteLine(db.Stats.ToString());
+            }
         }
     }
+
 
     static class Ext
     {
@@ -45,19 +71,35 @@ namespace Tests
         public string Id { get; set; }
         public string Name { get; set; }
         public int Age { get; set; }
+        public Gender Gender { get; set; }
 
         static public IEnumerable<Person> MakeMany()
         {
-            var names = new[] { "Ronnie", "Tina", "Anna", "Lukus", "Shane", "Walter", "Bob", "Brandon", "Mikey", "Morgan", "Wheeler", "Matt", "Horrace", "Willy", "Bill", "Dick", "Andrew", "Tyler", "Markus" };
+            var boyNames = new[] { "Ronnie", "Milton", "Andy", "Lukus", "Shane", "Walter", "Bob", "Brandon", "Mikey", "Morgan", "Wheeler", "Matt", "Hank", "Willy", "Bill", "Dick", "Andrew", "Tyler", "Markus" };
+            var girlNames = new[] { "Rhonda", "Tina", "Anna", "Lilly", "Shannon", "Willa", "Bobbie", "Phillis", "Megan", "Morgan", "Wilma", "Mildred", "Horrace", "Betty", "Sandra", "Darlene", "Amanda", "Tammy", "Angelina" };
             var surNames = new[] { "Overby", "Smith", "Darling", "Tamriel", "Leonard", "Dyson", "Samson", "Jackson", "Davis", "Namis", "Johnston" };
             while (true)
             {
+                var gender = RNG.NextBool() ? Gender.Male : Gender.Female;
+                var names = gender == Gender.Female ? girlNames : boyNames;
+
                 yield return new Person
                 {
-                    Age = RNG.Next(100),
-                    Name = string.Format("{0} {1}", names.Random(), surNames.Random())
+                    Age = RNG.Next(121),
+                    Name = string.Format("{0} {1}", names.Random(), surNames.Random()),
+                    Gender = gender
                 };
             }
         }
+    }
+
+    class Child : Person
+    {
+
+    }
+
+    internal enum Gender
+    {
+        Male, Female
     }
 }

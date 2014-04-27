@@ -7,12 +7,15 @@ namespace SomeDB.Storage
 
     public interface IStorage
     {
-        void Store(Type type, string id, string value);
-        string Retrieve(Type type, string id);
-        IEnumerable<string> RetrieveAll(Type type);
+        IEnumerable<IDocument> Store(IEnumerable<IDocument> documents);
+        IDocument Retrieve(Type type, string id);
+        IEnumerable<IDocument> RetrieveAll(Type type);
+        IEnumerable<IDocument> RetrieveAll();
         void Remove(Type type, string id);
-        void CopyTo(IStorage otherStorage);
-        void Purge();
-        void Purge(Type type);
+    }
+
+    public interface IPersistentStorage : IStorage
+    {
+        // marker interfaces for persistent storage services
     }
 }

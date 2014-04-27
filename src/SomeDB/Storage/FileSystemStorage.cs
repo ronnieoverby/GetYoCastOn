@@ -3,12 +3,14 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace SomeDB.Storage
 {
-    public class FileSystemStorage : IStorage
+    public class FileSystemStorage : IPersistentStorage
     {
+        private readonly ISerializer _serializer;
         private readonly DirectoryInfo _dir;
 
         private readonly ReaderWriterLockSlim _masterLock = new ReaderWriterLockSlim();
@@ -17,48 +19,64 @@ namespace SomeDB.Storage
         private readonly ConcurrentDictionary<string, ReaderWriterLockSlim> _fileLocks =
             new ConcurrentDictionary<string, ReaderWriterLockSlim>(StringComparer.OrdinalIgnoreCase);
 
-        public FileSystemStorage(string rootPath)
+        public FileSystemStorage(string rootPath = null, ISerializer serializer = null)
         {
-            if (rootPath == null) throw new ArgumentNullException("rootPath");
-            var di = new DirectoryInfo(rootPath);
+            var di = new DirectoryInfo(rootPath ?? this.GetDefaultDirectory());
             di.Create();
             _dir = di;
+            _serializer = serializer ?? new JsonSerializer();
         }
 
-        public FileSystemStorage()
-            : this(GetDefaultRootPath())
+        public IEnumerable<IDocument> Store(IEnumerable<IDocument> documents)
         {
+            foreach (var document in documents)
+            {
+                var type = document.GetType();
+
+                var file = _dir.CreateSubdirectory(type.FullName)
+                    .GetFile(document.Id);
+
+                var serialized = _serializer.Serialize(document);
+
+                Write(file.FullName, serialized);
+                yield return document;
+            }
         }
 
-        private static string GetDefaultRootPath()
-        {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var appName = AppDomain.CurrentDomain.FriendlyName;
-            return Path.Combine(appData, appName, "data");
-        }
-
-        public void Store(Type type, string id, string value)
-        {
-            var file = _dir.CreateSubdirectory(type.FullName)
-                .GetFile(id);
-
-            Write(file.FullName, value);
-        }
-
-        public string Retrieve(Type type, string id)
+        public IDocument Retrieve(Type type, string id)
         {
             var file = _dir.CreateSubdirectory(type.FullName)
                 .GetFile(id);
 
-            var value = Read(file.FullName);
-            return value;
+            var serialized = Read(file.FullName);
+            var document = (IDocument)_serializer.Deserialize(serialized, type);
+            return document;
         }
 
-        public IEnumerable<string> RetrieveAll(Type type)
+        public IEnumerable<IDocument> RetrieveAll(Type type)
         {
             var dir = _dir.CreateSubdirectory(type.FullName);
             return
-                dir.EnumerateFiles().Select(file => Read(file.FullName));
+                dir.EnumerateFiles().Select(file =>
+                {
+                    var serialized = Read(file.FullName);
+                    var doc = _serializer.Deserialize(serialized, type);
+                    return doc;
+                }).Cast<IDocument>();
+        }
+
+        public IEnumerable<IDocument> RetrieveAll()
+        {
+            var allTypes = AppDomain.CurrentDomain.GetTypes()
+                       .ToLookup(x => x.FullName, StringComparer.OrdinalIgnoreCase);
+
+            return from dir in _dir.GetDirectories()
+                let type = allTypes[dir.Name].Single()
+                where type != null
+                from file in dir.EnumerateFiles()
+                let value = Read(file.FullName)
+                let doc =(IDocument) _serializer.Deserialize(value, type)
+                select doc;
         }
 
         private string Read(string fullName)
@@ -164,49 +182,5 @@ namespace SomeDB.Storage
             Delete(file.FullName);
         }
 
-        public void CopyTo(IStorage otherStorage)
-        {
-            Exclusive(() =>
-            {
-                var allTypes = AppDomain.CurrentDomain.GetTypes()
-                    .ToLookup(x => x.FullName, StringComparer.OrdinalIgnoreCase);
-
-                var q = from dir in _dir.GetDirectories()
-                    let type = allTypes[dir.Name].Single()
-                    where type != null
-                    from file in dir.EnumerateFiles()
-                    let id = file.Name
-                    select new
-                    {
-                        type,
-                        id,
-                        value = File.ReadAllText(file.FullName)
-                    };
-
-                foreach (var item in q)
-                    otherStorage.Store(item.type, item.id, item.value);
-
-            });
-        }
-
-        public void Purge()
-        {
-            Exclusive(() =>
-            {
-                foreach (var directoryInfo in _dir.GetDirectories())
-                    directoryInfo.Delete(true);
-
-            });
-        }
-
-        public void Purge(Type type)
-        {
-            Exclusive(() =>
-            {
-                foreach (var directoryInfo in _dir.EnumerateDirectories(type.FullName))
-                    directoryInfo.Delete(true);
-
-            });
-        }
     }
 }

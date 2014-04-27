@@ -2,32 +2,32 @@
 using System.Linq;
 using CoreTechs.Common;
 using SomeDB;
-using SomeDB.Storage;
 
 namespace GetYoCastOn
 {
-    public class Program
+    public class Program: IDisposable
     {
-        private Database _db;
-
+        private readonly Database _db;
 
         public Program()
         {
             var config = DatabaseConfig.CreateDefault();
-            config.Storage = new FileSystemStorage("data");
             _db = new Database(config);
         }
 
         private static void Main()
         {
-            new Program().Run();
+            using (var program = new Program())
+                program.Run();
         }
 
         private void Run()
         {
-            while (true)
+            var exit = false;
+            while (!exit)
             {
                 Console.WriteLine("Choose wisely:");
+                Console.WriteLine("0.) Exit");
                 Console.WriteLine("1.) View Podcasts");
                 Console.WriteLine("2.) Add Podcast");
                 Console.WriteLine("3.) Remove Podcast");
@@ -43,8 +43,12 @@ namespace GetYoCastOn
                     case 3:
                         RemoveCast();
                         break;
+                    default:
+                        exit = true;
+                        break;
                 }
             }
+            
         }
 
         private void RemoveCast()
@@ -107,6 +111,11 @@ namespace GetYoCastOn
 
             foreach (var cast in casts.Where(cast => _db.GetEnumerable<Podcast>().All(x => x.Title != cast.Title)))
                 _db.Save(cast);
+        }
+
+        public void Dispose()
+        {
+            _db.Dispose();
         }
     }
 }

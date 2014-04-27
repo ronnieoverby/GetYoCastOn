@@ -1,103 +1,117 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using SomeDB.Storage;
 
 namespace SomeDB
 {
-    // TODO polymorphic queries
-    // TODO move serialization down into storage (some storage don't need to serialize)
-
-    public class Database
+    public class Database : IDisposable
     {
         private readonly IStorage _storage;
-        private readonly ISerializer _serializer;
-        private readonly ILookup<Type, Index> _indexes;
+        private readonly IList<Index> _indexes;
         private readonly IIdFactory _idFactory;
+        public Stats Stats { get; set; }
 
         public Database()
-            : this(BuildDefaultConfig())
+            : this(DatabaseConfig.CreateDefault())
         {
-        }
-
-        private static DatabaseConfig BuildDefaultConfig()
-        {
-            return new DatabaseConfig
-            {
-                Serializer = new JsonSerializer(),
-                Storage = new PersistedMemoryStorage()
-            };
         }
 
         public Database(DatabaseConfig config)
-            : this(config.Storage, config.Serializer, config.Indexes, config.IdFactory)
+            : this(config.Storage, config.Indexes, config.IdFactory, config.Stats)
         {
         }
 
-        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, IIdFactory idFactory)
+        public Database(IStorage storage, IEnumerable<Index> indexes = null, IIdFactory idFactory = null, Stats stats = null)
         {
+            Stats = stats;
             if (storage == null) throw new ArgumentNullException("storage");
-            if (serializer == null) throw new ArgumentNullException("serializer");
             _storage = storage;
-            _serializer = serializer;
-            _idFactory = idFactory;
+            _idFactory = idFactory ?? new GuidIdFactory();
 
-            if (indexes != null)
-                _indexes = indexes.ToLookup(x => x.Type);
-
-            foreach (var type in _indexes.Select(x => x.Key))
-                foreach (var value in GetEnumerable(type))
-                    foreach (var index in _indexes[type])
-                        index.Update(value);
+            _indexes = (indexes ?? new Index[0]).ToList();
+            InitIndexes(storage);
         }
 
-        private IEnumerable<IDocument> GetEnumerable(Type type)
+        private void InitIndexes(IStorage storage)
         {
-            // todo make polymorphic
-            return _storage.RetrieveAll(type)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Select(serialized => _serializer.Deserialize(serialized, type))
-                    .Select(value => value)
-                    .Where(x => x != null)
-                    .Cast<IDocument>();
+            if (!_indexes.Any()) return;
+            foreach (var document in storage.RetrieveAll())
+            {
+                var sw = Stopwatch.StartNew();
+                UpdateIndexes(document);
+                Stats.Record("Init Index", sw.Elapsed);
+            }
         }
 
-        public void Purge()
+        private readonly ConcurrentDictionary<Type, Type[]> _subTypeCache = new ConcurrentDictionary<Type, Type[]>();
+
+        public void SaveMany(IEnumerable<IDocument> documents)
         {
-            _storage.Purge();
+            if (documents == null) throw new ArgumentNullException("documents");
+
+            foreach (var doc in _storage.Store(documents.Select(EnsureIdAssigned)))
+                UpdateIndexes(doc);
         }
 
-        public void Save<T>(IEnumerable<T> values) where T : IDocument
+        private void UpdateIndexes(IDocument doc)
         {
-            if (values == null) throw new ArgumentNullException("values");
-            foreach (var item in values)
-                Save(item);
+            foreach (var index in GetIndexes(doc.GetType()))
+                index.Update(doc);
         }
 
-        public void Save<T>(T value) where T : IDocument
+        private readonly ConcurrentDictionary<Type, Index[]> _indexTypeCache = new ConcurrentDictionary<Type, Index[]>();
+
+        private Index[] GetIndexes(Type type)
         {
-            if (value == null) throw new ArgumentNullException("value");
+            return _indexTypeCache.GetOrAdd(type, t =>
+            {
+                var types = type.GetAllSuperTypes()
+                    .Where(x => x != typeof(IDocument) && typeof(IDocument).IsAssignableFrom(x)).ToList();
+                types.Add(type);
 
-            var type = value.GetType();
+                return _indexes.Where(i => types.Any(t2 => i.Type.IsAssignableFrom(t2))).ToArray();
 
-            if (string.IsNullOrWhiteSpace(value.Id))
-                _idFactory.AssignNewId(value);
+            });
+        }
 
-            var serialized = _serializer.Serialize(value);
-            _storage.Store(type, value.Id, serialized);
+        private IDocument EnsureIdAssigned(IDocument doc)
+        {
+            if (doc == null) throw new ArgumentNullException("doc");
+            var sw = Stopwatch.StartNew();
 
-            // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
-            foreach (Index<T> index in _indexes[type])
-                index.Update(value);
+            if (string.IsNullOrWhiteSpace(doc.Id))
+                _idFactory.AssignNewId(doc);
+
+            Stats.Record("EnsureIdAssigned", sw.Elapsed);
+
+            return doc;
+        }
+
+        public void Save(IDocument document)
+        {
+            if (document == null) throw new ArgumentNullException("document");
+            SaveMany(new[] { document });
+        }
+
+        internal T Load<T>(DocId id) where T : IDocument
+        {
+            if (id == null) throw new ArgumentNullException("id");
+            return (T)Load(id.Id, id.Type);
         }
 
         public T Load<T>(string id) where T : IDocument
         {
             if (id == null) throw new ArgumentNullException("id");
+            return (T)Load(id, typeof(T));
+        }
 
-            var type = typeof(T);
-            var serialized = _storage.Retrieve(type, id);
-            return (T)_serializer.Deserialize(serialized, type);
+        public IDocument Load(string id, Type type)
+        {
+            if (id == null) throw new ArgumentNullException("id");
+            return _storage.Retrieve(type, id);
         }
 
         public void Delete<T>(string id) where T : IDocument
@@ -106,16 +120,16 @@ namespace SomeDB
             Delete(typeof(T), id);
         }
 
-        public void Delete(IDocument value)
+        public void Delete(IDocument document)
         {
-            if (value == null) throw new ArgumentNullException("value");
-            Delete(value.GetType(), value.Id);
+            if (document == null) throw new ArgumentNullException("document");
+            Delete(document.GetType(), document.Id);
         }
 
-        public void Delete(IEnumerable<IDocument> values)
+        public void Delete(IEnumerable<IDocument> documents)
         {
-            if (values == null) throw new ArgumentNullException("values");
-            foreach (var doc in values)
+            if (documents == null) throw new ArgumentNullException("documents");
+            foreach (var doc in documents)
                 Delete(doc.GetType(), doc.Id);
         }
 
@@ -125,8 +139,19 @@ namespace SomeDB
             if (id == null) throw new ArgumentNullException("id");
 
             _storage.Remove(type, id);
-            foreach (var index in _indexes[type])
-                index.Remove(id);
+            foreach (var index in GetIndexes(type))
+                index.Remove(new DocId(type, id));
+        }
+
+        private IEnumerable<IDocument> GetEnumerable(Type type)
+        {
+            var subTypes = _subTypeCache.GetOrAdd(type, t => t.GetAllSubTypes());
+            var types = new[] { type }.Concat(subTypes);
+
+            return from t in types
+                   from doc in _storage.RetrieveAll(t)
+                   where doc != null
+                   select doc;
         }
 
         public IEnumerable<T> GetEnumerable<T>() where T : IDocument
@@ -134,13 +159,27 @@ namespace SomeDB
             return GetEnumerable(typeof(T)).Cast<T>();
         }
 
+        public IEnumerable<IDocument> GetEnumerable()
+        {
+            return _storage.RetrieveAll();
+        }
+
         public IEnumerable<TDoc> Query<TDoc, TKey>(Index<TDoc, TKey> index, Func<TKey, bool> indexPredicate = null, Func<TDoc, bool> documentPredicate = null)
             where TDoc : IDocument
         {
             if (index == null) throw new ArgumentNullException("index");
 
+            if (!IsAttached(index))
+                throw new ArgumentException(
+                    "That index is not attached. Attach all indexes at the time of database construction.", "index");
+
             var ids = index.Query(indexPredicate);
             return ids.Select(Load<TDoc>).Where(x => documentPredicate == null || documentPredicate(x));
+        }
+
+        private bool IsAttached(Index index)
+        {
+            return _indexes.Contains(index);
         }
 
         public void Update<T>(Action<T> updateAction, Func<T, bool> predicate = null) where T : IDocument
@@ -172,6 +211,13 @@ namespace SomeDB
 
             foreach (var item in Query(index, indexPredicate, documentPredicate))
                 Delete(item);
+        }
+
+        public void Dispose()
+        {
+            var disp = _storage as IDisposable;
+            if (disp != null)
+                disp.Dispose();
         }
     }
 }

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>SomeDB</RootNamespace>
     <AssemblyName>SomeDB</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -33,9 +33,12 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Esent.Collections">
+      <HintPath>..\packages\ManagedEsent.1.9.0.1\lib\net40\Esent.Collections.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Newtonsoft.Json.6.0.2\lib\net40\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.6.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -48,7 +51,10 @@
   <ItemGroup>
     <Compile Include="Database.cs" />
     <Compile Include="DatabaseConfig.cs" />
+    <Compile Include="DocId.cs" />
     <Compile Include="Extensions.cs" />
+    <Compile Include="Stats.cs" />
+    <Compile Include="Storage\EsentStorage.cs" />
     <Compile Include="Storage\FileSystemStorage.cs" />
     <Compile Include="GuidIdFactory.cs" />
     <Compile Include="IDocument.cs" />
@@ -59,9 +65,7 @@
     <Compile Include="JsonSerializer.cs" />
     <Compile Include="Storage\MemoryStorage.cs" />
     <Compile Include="Storage\PersistedMemoryStorage.cs" />
-    <Compile Include="StoredItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TypeDirectory.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
