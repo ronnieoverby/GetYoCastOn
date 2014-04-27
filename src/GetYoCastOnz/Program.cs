@@ -2,6 +2,7 @@
 using System.Linq;
 using CoreTechs.Common;
 using SomeDB;
+using SomeDB.Storage;
 
 namespace GetYoCastOn
 {

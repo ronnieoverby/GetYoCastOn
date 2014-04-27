@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace SomeDB
+namespace SomeDB.Storage
 {
     public class PersistedMemoryStorage : IStorage
     {

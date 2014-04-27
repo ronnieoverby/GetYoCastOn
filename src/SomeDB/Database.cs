@@ -1,17 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using SomeDB.Storage;
 
 namespace SomeDB
 {
     // TODO polymorphic queries
+    // TODO move serialization down into storage (some storage don't need to serialize)
 
     public class Database
     {
         private readonly IStorage _storage;
         private readonly ISerializer _serializer;
-        private readonly Func<Type, string> _idFactory;
         private readonly ILookup<Type, Index> _indexes;
+        private readonly IIdFactory _idFactory;
 
         public Database()
             : this(BuildDefaultConfig())
@@ -32,7 +34,7 @@ namespace SomeDB
         {
         }
 
-        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, Func<Type, string> idFactory)
+        private Database(IStorage storage, ISerializer serializer, IEnumerable<Index> indexes, IIdFactory idFactory)
         {
             if (storage == null) throw new ArgumentNullException("storage");
             if (serializer == null) throw new ArgumentNullException("serializer");
@@ -52,11 +54,12 @@ namespace SomeDB
         private IEnumerable<IDocument> GetEnumerable(Type type)
         {
             // todo make polymorphic
-            foreach (var serialized in _storage.RetrieveAll(type))
-            {
-                var value = _serializer.Deserialize(serialized, type);
-                yield return (IDocument)value;
-            }
+            return _storage.RetrieveAll(type)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(serialized => _serializer.Deserialize(serialized, type))
+                    .Select(value => value)
+                    .Where(x => x != null)
+                    .Cast<IDocument>();
         }
 
         public void Purge()
@@ -76,9 +79,9 @@ namespace SomeDB
             if (value == null) throw new ArgumentNullException("value");
 
             var type = value.GetType();
-            
+
             if (string.IsNullOrWhiteSpace(value.Id))
-                value.Id = _idFactory(type);
+                _idFactory.AssignNewId(value);
 
             var serialized = _serializer.Serialize(value);
             _storage.Store(type, value.Id, serialized);

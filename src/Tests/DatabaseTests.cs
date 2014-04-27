@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CoreTechs.Common;
 using NUnit.Framework;
 using SomeDB;
+using SomeDB.Storage;
 
 namespace Tests
 {
@@ -14,7 +15,6 @@ namespace Tests
         public void Test()
         {
             var config = DatabaseConfig.CreateDefault();
-            config.Storage = new FileSystemStorage();
 
             var index = new Index<Person, string>(
                 x => x.Name,
@@ -23,22 +23,13 @@ namespace Tests
 
             config.Indexes.Add(index);
 
+            var index2 = new Index<Person, int>(x => x.Age);
+            config.Indexes.Add(index2);
+
             var db = new Database(config);
 
-            Task.Run(() => db.Save(Person.MakeMany()));
-            while (true)
-            {
-                var sw = Stopwatch.StartNew();
-                var ronnies = db.GetEnumerable<Person>().Where(x => x.Name == "Ronnie Overby" && x.Age == 29).ToArray();
-                ronnies.Noop();
-                Console.WriteLine(sw.Elapsed);
-                Console.WriteLine(ronnies.Length);
-                sw.Restart();
-                ronnies = db.Query(index, name => name == "Ronnie Overby", x => x.Age == 29).ToArray();
-                Console.WriteLine(sw.Elapsed);
-                Console.WriteLine(ronnies.Length);
-                ronnies.Noop(); 
-            }
+            var under13 = db.Query(index2, x => x < 13).ToArray();
+            under13.Noop();
         }
     }
 

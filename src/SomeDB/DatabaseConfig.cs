@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using SomeDB.Storage;
 
 namespace SomeDB
 {
@@ -8,7 +8,7 @@ namespace SomeDB
         public IStorage Storage { get; set; }
         public ISerializer Serializer { get; set; }
         public IList<Index> Indexes { get; set; }
-        public Func<Type,string> IdFactory { get; set; }
+        public IIdFactory IdFactory { get; set; }
 
         public DatabaseConfig()
         {
@@ -20,8 +20,8 @@ namespace SomeDB
             return new DatabaseConfig
             {
                 Serializer = new JsonSerializer(),
-                Storage = new PersistedMemoryStorage(),
-                IdFactory = t => Guid.NewGuid().ToString()
+                Storage = new FileSystemStorage(),
+                IdFactory = new GuidIdFactory()
             };
         }
     }

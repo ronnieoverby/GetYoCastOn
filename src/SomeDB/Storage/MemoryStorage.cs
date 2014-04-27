@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SomeDB
+namespace SomeDB.Storage
 {
     public class MemoryStorage : IStorage
     {
