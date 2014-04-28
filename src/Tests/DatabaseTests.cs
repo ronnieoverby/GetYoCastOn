@@ -32,7 +32,8 @@ namespace Tests
         {
             var wallwalla = "wallwalla";
 
-            Func<IStorage> makeStorage = () => new EsentStorage(wallwalla);
+            Func<IStorage> makeStorage =
+                () => new SqlSeverStorage("server=.;database=overdb;integrated security = true", new JsonSerializer());
 
             /*  using (var db = new Database(makeStorage()))
                   db.Delete(db.GetEnumerable());*/
@@ -42,7 +43,21 @@ namespace Tests
 
             using (var db = new Database(makeStorage(), new[] { idxAgeGender }, stats: new Stats()))
             {
-                db.SaveMany(Person.MakeMany().Take(100));
+                db.SaveMany(new[]
+                {
+                    new Person{Id = "Ronnie"},
+                });  db.SaveMany(new[]
+                {
+                    new Person{Id = "Ronnie"},
+                });  db.SaveMany(new[]
+                {
+                    new Person{Id = "Ronnie"},
+                });  db.SaveMany(new[]
+                {
+                    new Person{Id = "Ronnie"},
+                });
+
+                db.SaveMany(Person.MakeMany().Take(10000));
 
                 const double age = 29;
                 var min = Math.Ceiling(age / 2 + 7);
@@ -50,8 +65,8 @@ namespace Tests
 
                 var ladies = db.Query(idxAgeGender, x => x.Age >= min && x.Age <= max && x.Gender == Gender.Female);
 
-              /*  foreach (var lady in ladies.OrderBy(x => x.Age))
-                    Console.WriteLine("{0} ({1})", lady.Name, lady.Age);*/
+                foreach (var lady in ladies.OrderBy(x => x.Age))
+                    Console.WriteLine("{0} ({1})", lady.Name, lady.Age);
 
                 Console.WriteLine(db.Stats.ToString());
             }

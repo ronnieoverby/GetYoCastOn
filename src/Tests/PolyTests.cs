@@ -14,9 +14,10 @@ namespace Tests
             var stgs = new IStorage[]
             {
                 new MemoryStorage(),
-                new PersistedMemoryStorage(),
+                //new PersistedMemoryStorage(),
                 new FileSystemStorage("fs"),
-                new EsentStorage("esent"),
+                //new EsentStorage("esent"),
+                new SqlSeverStorage("server=.;database=overdb;integrated security=true"), 
             };
 
             foreach (var stg in stgs)
@@ -41,9 +42,10 @@ namespace Tests
             var stgs = new IStorage[]
             {
                 new MemoryStorage(),
-                new PersistedMemoryStorage(),
+                //new PersistedMemoryStorage(),
                 new FileSystemStorage("fs"),
-                new EsentStorage("esent"),
+                //new EsentStorage("esent"),
+                new SqlSeverStorage("server=.;database=overdb;integrated security=true"), 
             };
 
             foreach (var stg in stgs)

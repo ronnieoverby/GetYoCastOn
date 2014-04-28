@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using SomeDB.Storage;
@@ -67,6 +68,20 @@ namespace SomeDB
         {
             if (stats == null) return;
             stats.AddOrUpdate(name, n => new Stats.Stat(name, elapsed), (n, stat) => stat.Record(elapsed));
+        }
+
+        public static IEnumerable<IEnumerable<T>> Buffer<T>(this IEnumerable<T> source, int bufferSize)
+        {
+            using (var enumerator = source.GetEnumerator())
+                while (enumerator.MoveNext())
+                    yield return YieldBufferElements(enumerator, bufferSize - 1);
+        }
+
+        private static IEnumerable<T> YieldBufferElements<T>(IEnumerator<T> source, int bufferSize)
+        {
+            yield return source.Current;
+            for (var i = 0; i < bufferSize && source.MoveNext(); i++)
+                yield return source.Current;
         }
     }
 }

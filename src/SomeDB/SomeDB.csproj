@@ -66,6 +66,7 @@
     <Compile Include="Storage\MemoryStorage.cs" />
     <Compile Include="Storage\PersistedMemoryStorage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Storage\SqlSeverStorage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
